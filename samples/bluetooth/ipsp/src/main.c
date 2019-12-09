@@ -14,6 +14,9 @@ LOG_MODULE_REGISTER(ipsp);
 /* Preventing log module registration in net_core.h */
 #define NET_LOG_ENABLED	0
 
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/hci.h>
+
 #include <zephyr.h>
 #include <linker/sections.h>
 #include <errno.h>
@@ -24,6 +27,10 @@ LOG_MODULE_REGISTER(ipsp);
 #include <net/net_core.h>
 #include <net/net_context.h>
 #include <net/udp.h>
+
+#include <sys/printk.h>
+
+
 
 /* admin-local, dynamically allocated multicast address */
 #define MCAST_IP6ADDR { { { 0xff, 0x02, 0, 0, 0, 0, 0, 0, \
@@ -166,8 +173,9 @@ static int build_reply(const char *name,
 	int ret;
 
 	LOG_DBG("%s received %d bytes", log_strdup(name), reply_len);
-
+	
 	ret = net_pkt_read(pkt, buf, reply_len);
+	printk("buf: %s", buf);
 	if (ret < 0) {
 		LOG_ERR("cannot read packet: %d", ret);
 		return ret;
@@ -333,11 +341,24 @@ static void listen(void)
 	net_context_put(tcp_recv6);
 }
 
+static u8_t mfg_data[] = { 0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x1 };
+
+static const struct bt_data ad[] = {
+	BT_DATA(BT_DATA_MANUFACTURER_DATA, mfg_data, 16),
+};
+
 void main(void)
 {
 	init_app();
-
+	bt_enable(NULL);
+	int err;
+	err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), NULL, 0);
+	if (err) {
+		printk("Advertising failed to start (err %d)\n", err);
+		return;
+	}
 	k_thread_create(&thread_data, thread_stack, STACKSIZE,
 			(k_thread_entry_t)listen,
 			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
+	
 }
